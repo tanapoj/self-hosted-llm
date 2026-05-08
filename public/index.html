@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Writer Assistant</title>
+    
+    <!-- Google Fonts: Sarabun -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Sarabun', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel (สำหรับการเขียน JSX ในไฟล์เดียว) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Marked (สำหรับ Render Markdown) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        /* ปรับขนาดฟอนต์เริ่มต้น (Base font size) ให้เล็กลง (1rem = 14px) */
+        html { font-size: 14px; }
+
+        /* CSS เพิ่มเติมเล็กน้อยสำหรับ Markdown */
+        .markdown-body { line-height: 1.65; }
+        .markdown-body p { margin-bottom: 0.75em; }
+        .markdown-body ul { list-style-type: disc; padding-left: 1.5em; margin-bottom: 0.75em; }
+        .markdown-body ol { list-style-type: decimal; padding-left: 1.5em; margin-bottom: 0.75em; }
+        .markdown-body h1, .markdown-body h2, .markdown-body h3 { font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
+        .markdown-body h1 { font-size: 1.5em; }
+        .markdown-body h2 { font-size: 1.25em; }
+        
+        /* สไตล์ Scrollbar */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-gray-50 h-screen overflow-hidden text-gray-800 font-sans font-light">
+    <div id="root" class="h-full"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // กำหนดรายการ System Prompts ทั้งหมดที่ต้องการใช้
+        const SYSTEM_PROMPTS = [
+            { 
+                id: "writer", 
+                name: "ผู้ช่วยนักเขียนทั่วไป", 
+                content: "คุณเป็นผู้ช่วยนักเขียนภาษาไทย ช่วยในด้าน:\n- คิดไอเดียและพัฒนาโครงเรื่อง\n- ขยายเนื้อหาและแต่งบทความ\n- ตรวจคำผิดและแนะนำการปรับปรุง\nตอบเป็นภาษาไทยเสมอ ยกเว้นถูกขอให้ตอบภาษาอื่น" 
+            },
+            { 
+                id: "novelist", 
+                name: "นักแต่งนิยาย", 
+                content: "คุณเป็นนักแต่งนิยายมืออาชีพ ช่วยในด้าน:\n- วางโครงเรื่อง สร้างปมปัญหา และพัฒนาตัวละคร\n- เขียนบรรยายฉากและอารมณ์ให้เห็นภาพและลึกซึ้ง\n- แต่งบทสนทนาให้เป็นธรรมชาติ\nตอบเป็นภาษาไทยเสมอด้วยภาษาสละสลวย" 
+            },
+            { 
+                id: "proofreader", 
+                name: "นักพิสูจน์อักษร", 
+                content: "คุณเป็นผู้เชี่ยวชาญด้านการพิสูจน์อักษรภาษาไทย หน้าที่ของคุณคือ:\n- ตรวจจับคำผิด ไวยากรณ์ และการใช้คำที่เยิ่นเย้อ\n- แนะนำวิธีแก้ไขให้ประโยคอ่านง่าย สละสลวย และเป็นทางการ\n- อธิบายเหตุผลสั้นๆ ในการแก้ไข\nตอบเป็นภาษาไทยเสมอ" 
+            },
+            { 
+                id: "marketer", 
+                name: "นักก็อปปี้ไรเตอร์", 
+                content: "คุณเป็นนักการตลาดและก็อปปี้ไรเตอร์มืออาชีพ หน้าที่ของคุณคือ:\n- เขียนข้อความโฆษณา แคปชั่น หรือบทความเพื่อการตลาด\n- ใช้ภาษาที่ดึงดูดความสนใจ กระตุ้นให้อยากติดตาม และมี Call to action ที่ชัดเจน\nตอบเป็นภาษาไทยเสมอ" 
+            }
+        ];
+
+        function App() {
+            const [chats, setChats] = useState([]);
+            const [currentChatId, setCurrentChatId] = useState(null);
+            const [messages, setMessages] = useState([]);
+            const [inputText, setInputText] = useState("");
+            const [isLoading, setIsLoading] = useState(false);
+            
+            // เพิ่ม State สำหรับ System Prompt
+            const [selectedModel, setSelectedModel] = useState("thai25");
+            const [selectedPromptId, setSelectedPromptId] = useState(SYSTEM_PROMPTS[0].id);
+            
+            // State สำหรับการแก้ไขชื่อแชท
+            const [editingChatId, setEditingChatId] = useState(null);
+            const [editTitleInput, setEditTitleInput] = useState("");
+            
+            const messagesEndRef = useRef(null);
+
+            // 1. ดึงรายชื่อแชทเมื่อโหลดหน้าเว็บ
+            useEffect(() => {
+                fetchChats();
+            }, []);
+
+            // เลื่อนจอลงอัตโนมัติเมื่อมีข้อความใหม่
+            useEffect(() => {
+                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+            }, [messages]);
+
+            const fetchChats = async () => {
+                try {
+                    const res = await fetch("/api/chats");
+                    const data = await res.json();
+                    setChats(data);
+                    if (data.length > 0 && !currentChatId) {
+                        loadChat(data[0].id);
+                    }
+                } catch (error) {
+                    console.error("Error fetching chats:", error);
+                }
+            };
+
+            const loadChat = async (id) => {
+                try {
+                    const res = await fetch(`/api/chats/${id}`);
+                    const data = await res.json();
+                    setCurrentChatId(id);
+                    setMessages(data.messages || []);
+                } catch (error) {
+                    console.error("Error loading chat:", error);
+                }
+            };
+
+            const createNewChat = async () => {
+                try {
+                    const res = await fetch("/api/chats", { method: "POST" });
+                    const newChat = await res.json();
+                    setChats([newChat, ...chats]);
+                    setCurrentChatId(newChat.id);
+                    setMessages([]);
+                } catch (error) {
+                    console.error("Error creating chat:", error);
+                }
+            };
+
+            // ฟังก์ชันเริ่มแก้ชื่อแชท
+            const startEditingTitle = (chat, e) => {
+                e.stopPropagation();
+                setEditingChatId(chat.id);
+                setEditTitleInput(chat.title);
+            };
+
+            // ฟังก์ชันบันทึกชื่อแชท
+            const saveChatTitle = async (id, e) => {
+                if (e) e.stopPropagation();
+                if (!editTitleInput.trim()) {
+                    setEditingChatId(null);
+                    return;
+                }
+                
+                try {
+                    await fetch(`/api/chats/${id}/title`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ title: editTitleInput.trim() })
+                    });
+                    
+                    // อัปเดต state รายชื่อแชทบนหน้าเว็บทันที
+                    setChats(prevChats => prevChats.map(c => 
+                        c.id === id ? { ...c, title: editTitleInput.trim() } : c
+                    ));
+                    setEditingChatId(null);
+                } catch (error) {
+                    console.error("Error updating title:", error);
+                }
+            };
+
+            const sendMessage = async (overrideMessage = null) => {
+                const messageToSend = overrideMessage || inputText.trim();
+                if (!messageToSend || !currentChatId) return;
+
+                // อัปเดต UI ทันที
+                const newUserMessage = { role: "user", content: messageToSend };
+                setMessages(prev => [...prev, newUserMessage]);
+                setInputText("");
+                setIsLoading(true);
+
+                // สร้างข้อความว่างรอไว้สำหรับคำตอบของ AI
+                setMessages(prev => [...prev, { role: "assistant", content: "" }]);
+
+                // ดึง Content ของ System Prompt ที่เลือก
+                const currentSystemPrompt = SYSTEM_PROMPTS.find(p => p.id === selectedPromptId)?.content || SYSTEM_PROMPTS[0].content;
+
+                try {
+                    const response = await fetch(`/api/chats/${currentChatId}/message`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ 
+                            message: messageToSend, 
+                            model: selectedModel,
+                            systemPrompt: currentSystemPrompt // ส่ง System Prompt ไปให้ Backend ด้วย
+                        }),
+                    });
+
+                    if (!response.body) throw new Error("No response body");
+
+                    // อ่านข้อมูลแบบ Streaming
+                    const reader = response.body.getReader();
+                    const decoder = new TextDecoder("utf-8");
+                    let aiFullResponse = "";
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+
+                        const chunk = decoder.decode(value, { stream: true });
+                        aiFullResponse += chunk;
+
+                        // อัปเดตข้อความสุดท้ายของ AI แบบเรียลไทม์
+                        setMessages(prev => {
+                            const newMessages = [...prev];
+                            newMessages[newMessages.length - 1] = { role: "assistant", content: aiFullResponse };
+                            return newMessages;
+                        });
+                    }
+                    
+                    // ดึงรายชื่อแชทใหม่เพื่ออัปเดตชื่อแชทที่ถูกตั้งโดย backend
+                    fetchChats(); 
+
+                } catch (error) {
+                    console.error("Error streaming message:", error);
+                    setMessages(prev => {
+                        const newMessages = [...prev];
+                        newMessages[newMessages.length - 1] = { role: "assistant", content: "เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองอีกครั้ง" };
+                        return newMessages;
+                    });
+                } finally {
+                    setIsLoading(false);
+                }
+            };
+
+            const handleKeyDown = (e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!isLoading) sendMessage();
+                }
+            };
+
+            const handleQuickAction = (task) => {
+                let prefix = "";
+                if (task === "proofread") prefix = "ตรวจคำผิดและแนะนำการแก้ไขข้อความนี้:\n\n";
+                else if (task === "expand") prefix = "ขยายเนื้อหาย่อหน้านี้ให้ละเอียดและสละสลวยขึ้น:\n\n";
+                else if (task === "idea") prefix = "ช่วยคิดไอเดียสำหรับ: ";
+                
+                setInputText(prefix);
+                document.getElementById('chat-input').focus();
+            };
+
+            return (
+                <div className="flex h-full w-full">
+                    {/* Sidebar */}
+                    <div className="w-64 bg-gray-900 text-white flex flex-col h-full flex-shrink-0">
+                        <div className="p-4 border-b border-gray-700">
+                            <button 
+                                onClick={createNewChat}
+                                className="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg transition-colors"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+                                สร้างแชทใหม่
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-2">
+                            {chats.map(chat => (
+                                <div 
+                                    key={chat.id} 
+                                    className={`group flex items-center w-full p-2 rounded-lg mb-1 transition-colors cursor-pointer ${currentChatId === chat.id ? "bg-gray-800 text-white" : "text-gray-300 hover:bg-gray-800"}`}
+                                    onClick={() => loadChat(chat.id)}
+                                >
+                                    {editingChatId === chat.id ? (
+                                        <div className="flex items-center w-full gap-2" onClick={e => e.stopPropagation()}>
+                                            <input 
+                                                type="text" 
+                                                value={editTitleInput} 
+                                                onChange={e => setEditTitleInput(e.target.value)}
+                                                onKeyDown={e => {
+                                                    if (e.key === 'Enter') saveChatTitle(chat.id);
+                                                    if (e.key === 'Escape') setEditingChatId(null);
+                                                }}
+                                                className="flex-1 bg-gray-700 text-white px-2 py-1 rounded outline-none w-full border border-blue-500"
+                                                autoFocus
+                                            />
+                                            <button onClick={(e) => saveChatTitle(chat.id, e)} className="text-emerald-400 hover:text-emerald-300 shrink-0">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                                            </button>
+                                            <button onClick={() => setEditingChatId(null)} className="text-red-400 hover:text-red-300 shrink-0">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <>
+                                            <div className="flex-1 text-left truncate py-1">
+                                                {chat.title}
+                                            </div>
+                                            <button 
+                                                onClick={(e) => startEditingTitle(chat, e)} 
+                                                className={`opacity-0 group-hover:opacity-100 p-1 text-gray-400 hover:text-white transition-opacity shrink-0`} 
+                                                title="เปลี่ยนชื่อแชท"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path></svg>
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Main Chat Area */}
+                    <div className="flex-1 flex flex-col h-full bg-white relative">
+                        
+                        {/* Header */}
+                        <div className="h-14 border-b flex items-center justify-between px-6 bg-white shadow-sm z-10 flex-wrap gap-2">
+                            <h1 className="font-semibold text-lg text-gray-700 hidden sm:block">ผู้ช่วยนักเขียน</h1>
+                            
+                            <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+                                <select 
+                                    value={selectedPromptId} 
+                                    onChange={(e) => setSelectedPromptId(e.target.value)}
+                                    className="border rounded-md px-3 py-1.5 bg-gray-50 outline-none focus:border-blue-500 text-sm flex-shrink-0"
+                                >
+                                    {SYSTEM_PROMPTS.map(p => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </select>
+
+                                <select 
+                                    value={selectedModel} 
+                                    onChange={(e) => setSelectedModel(e.target.value)}
+                                    className="border rounded-md px-3 py-1.5 bg-gray-50 outline-none focus:border-blue-500 text-sm flex-shrink-0"
+                                >
+                                    <option value="thai25">Typhoon 2.5 (4B)</option>
+                                    <option value="thai21">Typhoon 2.1 (12B)</option>
+                                    <option value="general32">Qwen3 (32B)</option>
+                                    <option value="general12">Gemma3 (12B)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Chat History */}
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-6 scroll-smooth">
+                            {messages.length === 0 ? (
+                                <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-4">
+                                    <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 19l7-7 3 3-7 7-3-3z"></path><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"></path><path d="M2 2l7.586 7.586"></path><circle cx="11" cy="11" r="2"></circle></svg>
+                                    </div>
+                                    <h2 className="text-xl font-medium text-gray-700">เริ่มแต่งงานเขียนของคุณเลย</h2>
+                                    <p>พิมพ์ข้อความด้านล่าง หรือเลือกใช้งานเครื่องมือด่วน</p>
+                                    
+                                    <div className="flex gap-2 mt-4">
+                                        <button onClick={() => handleQuickAction('proofread')} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full transition">📝 ตรวจคำผิด</button>
+                                        <button onClick={() => handleQuickAction('expand')} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full transition">✨ ขยายความ</button>
+                                        <button onClick={() => handleQuickAction('idea')} className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-full transition">💡 คิดไอเดีย</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="max-w-3xl mx-auto space-y-6 pb-4">
+                                    {messages.map((msg, idx) => (
+                                        <div key={idx} className={`flex gap-4 ${msg.role === "user" ? "flex-row-reverse" : ""}`}>
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${msg.role === "user" ? "bg-blue-600 text-white" : "bg-emerald-500 text-white"}`}>
+                                                {msg.role === "user" ? "U" : "AI"}
+                                            </div>
+                                            <div className={`max-w-[80%] rounded-2xl p-4 ${
+                                                msg.role === "user" 
+                                                    ? "bg-gray-100 text-gray-800 rounded-tr-none" 
+                                                    : "bg-white border border-gray-100 shadow-sm rounded-tl-none markdown-body"
+                                            }`}>
+                                                {msg.role === "assistant" ? (
+                                                    <div dangerouslySetInnerHTML={{ __html: marked.parse(msg.content || "...") }} />
+                                                ) : (
+                                                    <div className="whitespace-pre-wrap">{msg.content}</div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <div ref={messagesEndRef} />
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Input Area */}
+                        <div className="p-4 bg-white border-t">
+                            <div className="max-w-3xl mx-auto relative border rounded-xl shadow-sm bg-white focus-within:ring-1 focus-within:ring-blue-500 focus-within:border-blue-500 overflow-hidden">
+                                <textarea
+                                    id="chat-input"
+                                    value={inputText}
+                                    onChange={(e) => setInputText(e.target.value)}
+                                    onKeyDown={handleKeyDown}
+                                    placeholder="พิมพ์คำสั่งหรือข้อความที่นี่... (Shift + Enter เพื่อขึ้นบรรทัดใหม่)"
+                                    className="w-full max-h-48 min-h-[56px] p-4 pr-14 resize-none outline-none bg-transparent block"
+                                    rows="2"
+                                    disabled={isLoading}
+                                ></textarea>
+                                <button 
+                                    onClick={() => sendMessage()}
+                                    disabled={!inputText.trim() || isLoading}
+                                    className={`absolute right-2 bottom-2 p-2 rounded-lg transition-colors ${
+                                        inputText.trim() && !isLoading 
+                                        ? "bg-blue-600 text-white hover:bg-blue-700" 
+                                        : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                    }`}
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg>
+                                </button>
+                            </div>
+                            <div className="text-center text-gray-400 mt-2" style={{ fontSize: '0.85em' }}>
+                                AI สามารถทำผิดพลาดได้ ควรตรวจสอบข้อมูลก่อนนำไปใช้งานเสมอ
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>

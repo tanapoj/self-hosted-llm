@@ -117,7 +117,7 @@ app.post("/api/chats/:id/message", async (req, res) => {
 
     // ตั้งชื่อแชทจากข้อความแรก
     if (chatData.messages.length === 0) {
-      chatData.title = message.substring(0, 30) + (message.length > 30 ? "..." : "");
+      chatData.title = message.substring(0, 50) + (message.length > 50 ? "..." : "");
     }
 
     // เพิ่มข้อความผู้ใช้

@@ -132,6 +132,7 @@
             // เพิ่ม State สำหรับ System Prompt
             const [selectedModel, setSelectedModel] = useState("thai25");
             const [selectedPromptId, setSelectedPromptId] = useState(SYSTEM_PROMPTS[0].id);
+            const [historyLimit, setHistoryLimit] = useState(20); // State สำหรับ History Limit
             
             // State สำหรับการแก้ไขชื่อแชท
             const [editingChatId, setEditingChatId] = useState(null);
@@ -147,7 +148,7 @@
                 fetchChats();
             }, []);
 
-            // [อัปเดตใหม่] เลื่อนจออัตโนมัติเฉพาะเมื่อควรจะเลื่อน
+            // เลื่อนจออัตโนมัติเฉพาะเมื่อควรจะเลื่อน
             useEffect(() => {
                 if (shouldAutoScroll.current) {
                     // เปลี่ยนจาก 'smooth' เป็น 'auto' ในระหว่างที่ตัวหนังสือวิ่ง (Streaming) 
@@ -156,7 +157,7 @@
                 }
             }, [messages]);
 
-            // [เพิ่มใหม่] ฟังก์ชันเช็คตำแหน่ง Scroll
+            // ฟังก์ชันเช็คตำแหน่ง Scroll
             const handleScroll = () => {
                 if (!chatContainerRef.current) return;
                 
@@ -241,7 +242,7 @@
                 const messageToSend = overrideMessage || inputText.trim();
                 if (!messageToSend || !currentChatId) return;
 
-                // [อัปเดตใหม่] เมื่อผู้ใช้ส่งข้อความใหม่ ให้บังคับเลื่อนลงล่างสุดเสมอ
+                // บังคับเลื่อนลงล่างสุดเสมอเมื่อส่งข้อความใหม่
                 shouldAutoScroll.current = true;
 
                 const newUserMessage = { role: "user", content: messageToSend };
@@ -262,7 +263,8 @@
                         body: JSON.stringify({ 
                             message: messageToSend, 
                             model: selectedModel,
-                            systemPrompt: currentSystemPrompt // ส่ง System Prompt ไปให้ Backend ด้วย
+                            systemPrompt: currentSystemPrompt,
+                            historyLimit: parseInt(historyLimit, 10) // ส่ง limit ไปด้วย
                         }),
                     });
 
@@ -387,6 +389,18 @@
                             <h1 className="font-semibold text-lg text-gray-700 hidden sm:block">ผู้ช่วยนักเขียน</h1>
                             
                             <div className="flex items-center gap-2 w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
+                                
+                                {/* History Limit Input */}
+                                <div className="flex items-center gap-2 border rounded-md px-2 py-1.5 bg-gray-50 focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 flex-shrink-0" title="จำนวนประวัติแชทที่จะส่งให้ AI (0 หรือติดลบ = ส่งทั้งหมด)">
+                                    <span className="text-sm text-gray-500 whitespace-nowrap">History Limit:</span>
+                                    <input 
+                                        type="number" 
+                                        value={historyLimit} 
+                                        onChange={(e) => setHistoryLimit(e.target.value)}
+                                        className="w-12 bg-transparent outline-none text-sm text-center"
+                                    />
+                                </div>
+
                                 <select 
                                     value={selectedPromptId} 
                                     onChange={(e) => setSelectedPromptId(e.target.value)}

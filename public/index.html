@@ -43,15 +43,18 @@
 
         /* CSS เพิ่มเติมเล็กน้อยสำหรับ Markdown */
         .markdown-body { line-height: 1.65; }
+        
+        /* ตั้งค่าย่อหน้าเข้าไป 0.5 นิ้ว เวลา Copy ไปลง Word จะกลายเป็น First line indent พอดี */
         .markdown-body p { 
             margin-bottom: 1em;
             margin-top: 1.5em;
             line-height: 1.75em;
             text-indent: 0.5in;
         }
-        .markdown-body ul { list-style-type: disc; padding-left: 1.5em; margin-bottom: 0.75em; }
-        .markdown-body ol { list-style-type: decimal; padding-left: 1.5em; margin-bottom: 0.75em; }
-        .markdown-body h1, .markdown-body h2, .markdown-body h3 { font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; }
+        
+        /* ถ้าเป็นหัวข้อ หรือลิสต์ ไม่ต้องย่อหน้า */
+        .markdown-body ul, .markdown-body ol { list-style-position: inside; margin-bottom: 0.75em; text-indent: 0; }
+        .markdown-body h1, .markdown-body h2, .markdown-body h3 { font-weight: bold; margin-top: 1em; margin-bottom: 0.5em; text-indent: 0; }
         .markdown-body h1 { font-size: 1.5em; }
         .markdown-body h2 { font-size: 1.25em; }
         
@@ -134,17 +137,36 @@
             const [editingChatId, setEditingChatId] = useState(null);
             const [editTitleInput, setEditTitleInput] = useState("");
             
+            // Refs สำหรับจัดการการเลื่อนจอ
             const messagesEndRef = useRef(null);
+            const chatContainerRef = useRef(null);
+            const shouldAutoScroll = useRef(true);
 
-            // 1. ดึงรายชื่อแชทเมื่อโหลดหน้าเว็บ
+            // ดึงรายชื่อแชทเมื่อโหลดหน้าเว็บ
             useEffect(() => {
                 fetchChats();
             }, []);
 
-            // เลื่อนจอลงอัตโนมัติเมื่อมีข้อความใหม่
+            // [อัปเดตใหม่] เลื่อนจออัตโนมัติเฉพาะเมื่อควรจะเลื่อน
             useEffect(() => {
-                messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+                if (shouldAutoScroll.current) {
+                    // เปลี่ยนจาก 'smooth' เป็น 'auto' ในระหว่างที่ตัวหนังสือวิ่ง (Streaming) 
+                    // เพื่อให้ผู้ใช้สามารถจับ Scrollbar สู้ได้ง่ายขึ้น (Smooth animation มักจะกระตุกเวลาข้อมูลอัปเดตถี่เกินไป)
+                    messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+                }
             }, [messages]);
+
+            // [เพิ่มใหม่] ฟังก์ชันเช็คตำแหน่ง Scroll
+            const handleScroll = () => {
+                if (!chatContainerRef.current) return;
+                
+                const { scrollTop, scrollHeight, clientHeight } = chatContainerRef.current;
+                // คำนวณระยะห่างจากขอบล่างสุด (ใส่ค่าเผื่อไว้ 50px เพื่อความลื่นไหล)
+                const distanceToBottom = scrollHeight - scrollTop - clientHeight;
+                
+                // ถ้าห่างจากล่างสุดไม่เกิน 50px แปลว่าอยู่ล่างสุด ให้เปิด Auto-scroll
+                shouldAutoScroll.current = distanceToBottom <= 50;
+            };
 
             const fetchChats = async () => {
                 try {
@@ -165,6 +187,8 @@
                     const data = await res.json();
                     setCurrentChatId(id);
                     setMessages(data.messages || []);
+                    // เมื่อโหลดแชทใหม่ บังคับให้เริ่มที่ขอบล่าง
+                    shouldAutoScroll.current = true;
                 } catch (error) {
                     console.error("Error loading chat:", error);
                 }
@@ -204,7 +228,6 @@
                         body: JSON.stringify({ title: editTitleInput.trim() })
                     });
                     
-                    // อัปเดต state รายชื่อแชทบนหน้าเว็บทันที
                     setChats(prevChats => prevChats.map(c => 
                         c.id === id ? { ...c, title: editTitleInput.trim() } : c
                     ));
@@ -218,7 +241,9 @@
                 const messageToSend = overrideMessage || inputText.trim();
                 if (!messageToSend || !currentChatId) return;
 
-                // อัปเดต UI ทันที
+                // [อัปเดตใหม่] เมื่อผู้ใช้ส่งข้อความใหม่ ให้บังคับเลื่อนลงล่างสุดเสมอ
+                shouldAutoScroll.current = true;
+
                 const newUserMessage = { role: "user", content: messageToSend };
                 setMessages(prev => [...prev, newUserMessage]);
                 setInputText("");
@@ -386,7 +411,11 @@
                         </div>
 
                         {/* Chat History */}
-                        <div className="flex-1 overflow-y-auto p-4 sm:p-6 scroll-smooth">
+                        <div 
+                            className="flex-1 overflow-y-auto p-4 sm:p-6"
+                            ref={chatContainerRef}
+                            onScroll={handleScroll}
+                        >
                             {messages.length === 0 ? (
                                 <div className="h-full flex flex-col items-center justify-center text-gray-400 space-y-4">
                                     <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mb-4">
@@ -410,7 +439,7 @@
                                             </div>
                                             <div className={`max-w-[80%] rounded-2xl p-4 ${
                                                 msg.role === "user" 
-                                                    ? "bg-green-100 text-gray-800 rounded-tr-none" 
+                                                    ? "bg-green-100 text-gray-800 rounded-tr-none text-indent-0" 
                                                     : "bg-white border border-gray-100 shadow-sm rounded-tl-none markdown-body"
                                             }`}>
                                                 {msg.role === "assistant" ? (

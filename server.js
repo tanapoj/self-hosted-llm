@@ -135,6 +135,7 @@ app.post("/api/chats/:id/message", async (req, res) => {
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
     res.setHeader("Transfer-Encoding", "chunked");
 
+    console.log('call Ollama chat')
     const response = await Ollama.chat({
       model: MODELS[model],
       messages: ollamaMessages,
@@ -145,6 +146,7 @@ app.post("/api/chats/:id/message", async (req, res) => {
 
     for await (const part of response) {
       const text = part.message.content;
+      console.log('stream text:', text.substring(0, 50) + (text.length > 50 ? "..." : ""))
       assistantFullResponse += text;
       res.write(text); // ส่งข้อมูลก้อนย่อยๆ กลับไปทันที
     }
